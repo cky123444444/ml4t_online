@@ -1,0 +1,184 @@
+services:
+  torchserve:
+    build:
+      context: ./torchserve
+      dockerfile: Dockerfile
+    container_name: ml-torchserve
+    ports:
+      - "8080:8080"  # Inference API
+      - "8081:8081"  # Management API
+      - "8082:8082"  # Metrics API
+    networks:
+      - ml-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    develop:
+      watch:
+        - action: rebuild
+          path: ./torchserve/model_files/
+        - action: rebuild
+          path: ./torchserve/raw_models/
+        - action: rebuild
+          path: ./torchserve/config.properties
+        - action: rebuild
+          path: ./torchserve/Dockerfile
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ml-server
+    ports:
+      - "8000:8000"  # Main API
+    environment:
+      - TS_BASE_URL=http://torchserve:8080
+      - TS_MODEL=ple
+      - HDF_PATH=/app/torchserve/data/last_max_window_10000_ochlv.hdf
+      - HDF_KEY=my_data
+      - NUM_FEATURES=111
+      - HISTORY_WINDOW=14000
+      - TS_TIMEOUT=30
+      - DEBUG_OUTPUT_DIR=/app/debug_output
+      - OFFLINE_DEBUG_MODE=${OFFLINE_DEBUG_MODE:-0}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_DIR=/app/logs/server
+      - LOG_FILE_NAME=server.log
+      - LOG_TO_FILE=True
+    volumes:
+      - ./debug_output:/app/debug_output
+      - ./data:/app/data
+      - ./logs/server:/app/logs/server
+      - ./logs/torchserve:/app/logs/torchserve
+    networks:
+      - ml-network
+    depends_on:
+      torchserve:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    develop:
+      watch:
+        - action: rebuild
+          path: ./src/
+          target: /app/src/
+          ignore:
+            - __pycache__/
+            - "*.pyc"
+        - action: rebuild
+          path: ./requirements.txt
+        - action: rebuild
+          path: ./Dockerfile
+
+  aggregator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ml-aggregator
+    command: python run_aggregator.py
+    environment:
+      - HDF_DIR=/app/data/hdf_dumper
+      - OUTPUT_DIR=/app/data/aggregated
+      - SCHEDULE_MINUTE=5
+      - RETENTION_DAYS=90
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/app/data
+      - ./logs/aggregator:/app/logs/aggregator
+      - ./src:/app/src
+      - ./run_aggregator.py:/app/run_aggregator.py
+    networks:
+      - ml-network
+    depends_on:
+      - server
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    develop:
+      watch:
+        - action: rebuild
+          path: ./src/
+          target: /app/src/
+          ignore:
+            - __pycache__/
+            - "*.pyc"
+        - action: rebuild
+          path: ./run_aggregator.py
+        - action: rebuild
+          path: ./requirements.txt
+        - action: rebuild
+          path: ./Dockerfile
+
+  prediction-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ml-prediction-scheduler
+    command: python prediction_scheduler.py
+    environment:
+      - SERVER_URL=http://server:8000
+      - SCHEDULER_INTERVAL_MINUTES=1
+      - SCHEDULER_METHOD=process_3
+      - SCHEDULER_RETRY_COUNT=1
+      - TS_TIMEOUT=90
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_DIR=/app/logs/prediction_scheduler
+      - LOG_FILE_NAME=prediction_scheduler.log
+    volumes:
+      - ./logs/prediction_scheduler:/app/logs/prediction_scheduler
+    networks:
+      - ml-network
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://server:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    develop:
+      watch:
+        - action: rebuild
+          path: ./prediction_scheduler.py
+        - action: rebuild
+          path: ./requirements.txt
+        - action: rebuild
+          path: ./Dockerfile
+
+networks:
+  ml-network:
+    driver: bridge
+
+volumes:
+  torchserve-logs:
+  server-logs:
+  aggregator-logs:

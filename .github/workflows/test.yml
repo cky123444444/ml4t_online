@@ -1,0 +1,111 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, develop, zy_dve_2 ]
+  pull_request:
+    branches: [ main ]
+  # 定时运行（每天凌晨 2 点 UTC）
+  schedule:
+    - cron: '0 2 * * *'
+  # 允许手动触发
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4  # 升级到 v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5  # 升级到 v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run unit tests
+        run: |
+          chmod +x ./run_unittest.sh
+          ./run_unittest.sh
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4  # 升级到 v4
+        with:
+          name: unit-test-results
+          path: unittest_output/
+          if-no-files-found: warn  # 如果没有文件也不报错
+          retention-days: 30  # 保留30天
+          compression-level: 6  # 压缩级别 (0-9)
+  
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    # 只在主分支、定时任务或手动触发时运行
+    if: |
+      github.ref == 'refs/heads/main' || 
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4  # 升级到 v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5  # 升级到 v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run integration tests
+        run: |
+          chmod +x ./run_unittest.sh
+          ./run_unittest.sh --integration
+        env:
+          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+          BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4  # 升级到 v4
+        with:
+          name: integration-test-results
+          path: unittest_output/
+          if-no-files-found: warn
+  
+  lint:
+    name: Code Linting
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4  # 升级到 v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5  # 升级到 v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pylint
+      
+      - name: Run flake8
+        run: |
+          flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        continue-on-error: true

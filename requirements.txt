@@ -1,0 +1,13 @@
+flask
+PyWavelets
+tables
+pandas
+scipy
+numpy
+requests
+joblib
+scikit-learn
+python-binance
+pyyaml
+redis
+apscheduler>=3.10.0

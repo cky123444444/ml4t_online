@@ -1,0 +1,100 @@
+{
+  "default_pipeline": "p_binance_sql_dump",
+  "method_mapping": {
+    "process_1": "p_hdf_local_strategy",
+    "process_2": "p_binance_sql_dump",
+    "process_3": "p_binance_hdf_strategy_dump"
+  },
+  "pipelines": {
+    "p_hdf_local_strategy": {
+      "steps": [
+        {
+          "type": "hdf_file"
+        },
+        {
+          "type": "sample"
+        },
+        {
+          "type": "torchserve"
+        },
+        {
+          "type": "ple_strategy"
+        }
+      ],
+      "debug_files": {
+        "raw_dataframe": "process1_raw_dataframe.csv",
+        "features": "process1_features.json",
+        "model_result": "process1_model_result.json"
+      }
+    },
+    "p_binance_sql_dump": {
+      "steps": [
+        {
+          "type": "binance_cached",
+          "start_minutes_ago": 50000,
+          "symbol": "BTCUSDT"
+        },
+        {
+          "type": "binance_adaptor"
+        },
+        {
+          "type": "sample",
+          "offline_debug_limit_rows": 1000
+        },
+        {
+          "type": "torchserve"
+        },
+        {
+          "type": "feature_dump_sql",
+          "symbol": "BTCUSDT",
+          "snapshot": "full",
+          "offline_tail_size": 100
+        }
+      ],
+      "debug_files": {
+        "adapted_dataframe": "process2_adapted_dataframe.csv",
+        "features": "process2_features.json",
+        "model_result": "process2_model_result.json"
+      }
+    },
+    "p_binance_hdf_strategy_dump": {
+      "steps": [
+        {
+          "type": "binance_cached",
+          "start_minutes_ago_from_context": "history_window",
+          "symbol": "BTCUSDT"
+        },
+        {
+          "type": "binance_adaptor"
+        },
+        {
+          "type": "sample",
+          "offline_debug_limit_rows": 1000
+        },
+        {
+          "type": "torchserve"
+        },
+        {
+          "type": "inject_cur_price"
+        },
+        {
+          "type": "debug_override_trigger",
+          "filename": "trigger_long.json"
+        },
+        {
+          "type": "ple_strategy"
+        },
+        {
+          "type": "feature_dump_hdf",
+          "symbol": "BTCUSDT",
+          "tail_size": 100
+        }
+      ],
+      "debug_files": {
+        "adapted_dataframe": "process3_adapted_dataframe.csv",
+        "features": "process3_features.json",
+        "model_result": "process3_model_result.json"
+      }
+    }
+  }
+}

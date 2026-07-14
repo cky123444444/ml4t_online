@@ -1,0 +1,24 @@
+{
+    "strategy_db_config": {
+
+    },
+    "queue_config": {
+        "score_key": "quantile_scores",
+        "top_threshold": 0.98,
+        "bottom_threshold": 0.02,
+        "queue_length": 1440,
+        "k": 2.0,
+        "quantile_mode": 2
+    },
+    "execute_config": {
+        "min_position": 0.001,
+        "min_long_threshold": 8.2,
+        "min_short_threshold": 5.9,
+        "kelly_factor": 0.5,
+        "sigma_mul": 3.0
+    },
+    "leverage_config": {
+        "sharpe_ratio_bins": [0.0, 0.25, 0.5, 0.6, 1.0, 1.5],
+        "leverage_list": [1, 1, 1, 1, 1, 1]
+    }
+}
